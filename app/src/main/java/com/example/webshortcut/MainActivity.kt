@@ -287,9 +287,8 @@ class MainActivity : ComponentActivity() {
         }
 
         val shortcutInfo = shortcutBuilder.build()
-        val shortcutManager = ShortcutManagerCompat(this)
 
-        if (shortcutManager.isRequestPinShortcutSupported) {
+        if (ShortcutManagerCompat.isRequestPinShortcutSupported(this)) {
             val resultIntent = ShortcutManagerCompat.createShortcutResultIntent(this, shortcutInfo)
             val pendingIntent = PendingIntent.getBroadcast(
                 this,
@@ -297,7 +296,7 @@ class MainActivity : ComponentActivity() {
                 resultIntent,
                 PendingIntent.FLAG_IMMUTABLE
             )
-            shortcutManager.requestPinShortcut(shortcutInfo, pendingIntent.intentSender)
+            ShortcutManagerCompat.requestPinShortcut(this, shortcutInfo, pendingIntent.intentSender)
         } else {
             Toast.makeText(this, "当前手机不支持添加桌面快捷方式", Toast.LENGTH_LONG).show()
         }
