@@ -33,11 +33,17 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -52,14 +58,24 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-// 数据模型：历史记录
+val GradientColors = listOf(Color(0xFF667eea), Color(0xFF764ba2))
+val BackgroundGradient = Brush.linearGradient(
+    colors = listOf(Color(0xFFf0f4ff), Color(0xFFe8ecf8))
+)
+val CardBackground = Color(0xD9FFFFFF)
+val IconPreviewGradient = Brush.linearGradient(
+    colors = listOf(Color(0xFFe0e7ff), Color(0xFFc7d2fe))
+)
+val TextGradient = Brush.linearGradient(
+    colors = GradientColors
+)
+
 data class ShortcutRecord(
     val name: String,
     val url: String,
     val createTime: Long
 )
 
-// 页面枚举
 enum class Page { MAIN, HISTORY }
 
 class MainActivity : ComponentActivity() {
@@ -108,9 +124,10 @@ class MainActivity : ComponentActivity() {
         loadHistory()
         setContent {
             MaterialTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = Color(0xFFF3F4F6)
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(BackgroundGradient)
                 ) {
                     when (currentPage) {
                         Page.MAIN -> MainScreen()
@@ -121,7 +138,60 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // ==================== 主页面 ====================
+    @Composable
+    fun GradientText(text: String, fontSize: androidx.compose.ui.unit.TextUnit, modifier: Modifier = Modifier) {
+        Text(
+            text = buildAnnotatedString {
+                withStyle(SpanStyle(brush = TextGradient)) {
+                    append(text)
+                }
+            },
+            fontSize = fontSize,
+            modifier = modifier,
+            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+        )
+    }
+
+    @Composable
+    fun GlassCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+        Card(
+            modifier = modifier
+                .shadow(
+                    elevation = 8.dp,
+                    shape = RoundedCornerShape(24.dp),
+                    ambientColor = Color(0xFF667eea).copy(alpha = 0.15f),
+                    spotColor = Color(0xFF667eea).copy(alpha = 0.15f)
+                ),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = CardBackground)
+        ) {
+            Column(modifier = Modifier.padding(24.dp), content = content)
+        }
+    }
+
+    @Composable
+    fun GradientButton(
+        onClick: () -> Unit,
+        text: String,
+        modifier: Modifier = Modifier,
+        icon: @Composable (() -> Unit)? = null
+    ) {
+        Box(
+            modifier = modifier
+                .clip(RoundedCornerShape(16.dp))
+                .background(Brush.linearGradient(colors = GradientColors))
+                .clickable(onClick = onClick)
+                .padding(horizontal = 24.dp, vertical = 12.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                icon?.invoke()
+                if (icon != null) Spacer(modifier = Modifier.width(8.dp))
+                Text(text = text, color = Color.White, fontSize = 14.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+            }
+        }
+    }
+
     @Composable
     fun MainScreen() {
         Column(
@@ -130,105 +200,116 @@ class MainActivity : ComponentActivity() {
                 .padding(horizontal = 20.dp, vertical = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // 顶部标题栏
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(text = "网页快捷方式", fontSize = 22.sp, color = Color(0xFF111827))
+                GradientText(text = "网页快捷方式", fontSize = 26.sp)
                 IconButton(onClick = { currentPage = Page.HISTORY }) {
-                    Icon(Icons.Outlined.History, contentDescription = "历史记录", tint = Color(0xFF374151))
+                    Icon(Icons.Outlined.History, contentDescription = "历史记录", tint = Color(0xFF667eea))
                 }
             }
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // 图标卡片
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(text = "快捷方式图标", fontSize = 16.sp, color = Color(0xFF374151))
-                    Spacer(modifier = Modifier.height(16.dp))
-                    IconPreview()
-                    Spacer(modifier = Modifier.height(18.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Button(onClick = { checkAndOpenGallery() }) {
-                            Icon(Icons.Outlined.Image, contentDescription = null)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("选择图片")
-                        }
-                        OutlinedButton(onClick = { iconBitmap = null }) {
-                            Icon(Icons.Outlined.Clear, contentDescription = null)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("清除")
-                        }
+            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "✨ 快捷方式图标",
+                    fontSize = 16.sp,
+                    color = Color(0xFF4a5568),
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                )
+                Spacer(modifier = Modifier.height(18.dp))
+                IconPreview()
+                Spacer(modifier = Modifier.height(20.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    GradientButton(
+                        onClick = { checkAndOpenGallery() },
+                        text = "选择图片",
+                        icon = { Icon(Icons.Outlined.Image, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp)) }
+                    )
+                    OutlinedButton(
+                        onClick = { iconBitmap = null },
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(containerColor = Color(0xB3FFFFFF))
+                    ) {
+                        Icon(Icons.Outlined.Clear, contentDescription = null, tint = Color(0xFF667eea), modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("清除", color = Color(0xFF667eea), fontSize = 14.sp)
                     }
                 }
             }
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // 信息卡片
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Text(text = "快捷方式信息", fontSize = 16.sp, color = Color(0xFF374151))
-                    Spacer(modifier = Modifier.height(16.dp))
+            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "📝 快捷方式信息",
+                    fontSize = 16.sp,
+                    color = Color(0xFF4a5568),
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                )
+                Spacer(modifier = Modifier.height(18.dp))
 
-                    TextField(
-                        value = labelText,
-                        onValueChange = {
-                            labelText = it
-                            labelError = false
-                        },
-                        label = { Text("桌面图标名称") },
-                        placeholder = { Text("例如：B站、百度") },
-                        singleLine = true,
-                        isError = labelError,
-                        supportingText = { if (labelError) Text("名称不能为空") },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
+                OutlinedTextField(
+                    value = labelText,
+                    onValueChange = {
+                        labelText = it
+                        labelError = false
+                    },
+                    label = { Text("桌面图标名称", color = Color(0xFF718096)) },
+                    placeholder = { Text("例如：B站、百度", color = Color(0xFFa0aec0)) },
+                    singleLine = true,
+                    isError = labelError,
+                    supportingText = { if (labelError) Text("名称不能为空", color = Color(0xFFe53e3e)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = Color(0xE6FFFFFF),
+                        unfocusedContainerColor = Color(0xE6FFFFFF),
+                        focusedBorderColor = Color(0xFF667eea),
+                        unfocusedBorderColor = Color(0xFFe2e8f0)
                     )
+                )
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(18.dp))
 
-                    TextField(
-                        value = urlText,
-                        onValueChange = {
-                            urlText = it
-                            urlError = false
-                        },
-                        label = { Text("网页地址URL") },
-                        placeholder = { Text("https://xxx.com") },
-                        singleLine = true,
-                        isError = urlError,
-                        supportingText = { if (urlError) Text("网址格式不正确") },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
+                OutlinedTextField(
+                    value = urlText,
+                    onValueChange = {
+                        urlText = it
+                        urlError = false
+                    },
+                    label = { Text("网页地址URL", color = Color(0xFF718096)) },
+                    placeholder = { Text("https://xxx.com", color = Color(0xFFa0aec0)) },
+                    singleLine = true,
+                    isError = urlError,
+                    supportingText = { if (urlError) Text("网址格式不正确", color = Color(0xFFe53e3e)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = Color(0xE6FFFFFF),
+                        unfocusedContainerColor = Color(0xE6FFFFFF),
+                        focusedBorderColor = Color(0xFF667eea),
+                        unfocusedBorderColor = Color(0xFFe2e8f0)
                     )
-                }
+                )
             }
 
             Spacer(modifier = Modifier.height(28.dp))
 
-            Button(
-                onClick = { createShortcutAction() },
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(52.dp),
-                shape = RoundedCornerShape(12.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(Brush.linearGradient(colors = GradientColors))
+                    .clickable(onClick = { createShortcutAction() })
+                    .padding(vertical = 18.dp),
+                contentAlignment = Alignment.Center
             ) {
-                Text("添加到桌面", fontSize = 16.sp)
+                Text("🚀 添加到桌面", color = Color.White, fontSize = 17.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
             }
         }
     }
@@ -238,24 +319,32 @@ class MainActivity : ComponentActivity() {
         val bitmap = iconBitmap
         Box(
             modifier = Modifier
-                .size(120.dp)
-                .background(Color(0xFFE9ECEF), shape = RoundedCornerShape(16.dp)),
+                .size(130.dp)
+                .clip(RoundedCornerShape(28.dp))
+                .background(IconPreviewGradient)
+                .shadow(
+                    elevation = 8.dp,
+                    shape = RoundedCornerShape(28.dp),
+                    ambientColor = Color(0xFF667eea).copy(alpha = 0.25f),
+                    spotColor = Color(0xFF667eea).copy(alpha = 0.25f)
+                ),
             contentAlignment = Alignment.Center
         ) {
             if (bitmap != null) {
                 Image(
                     bitmap = bitmap.asImageBitmap(),
                     contentDescription = "图标预览",
-                    modifier = Modifier.size(110.dp),
+                    modifier = Modifier
+                        .size(120.dp)
+                        .clip(RoundedCornerShape(24.dp)),
                     contentScale = ContentScale.Crop
                 )
             } else {
-                Text(text = "预览图标", color = Color.Gray, fontSize = 14.sp)
+                Text(text = "预览图标", color = Color(0xFF667eea), fontSize = 14.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
             }
         }
     }
 
-    // ==================== 历史记录页面 ====================
     @Composable
     fun HistoryScreen() {
         Column(
@@ -263,7 +352,6 @@ class MainActivity : ComponentActivity() {
                 .fillMaxSize()
                 .padding(horizontal = 20.dp, vertical = 32.dp)
         ) {
-            // 顶部栏
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -271,36 +359,38 @@ class MainActivity : ComponentActivity() {
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { currentPage = Page.MAIN }) {
-                        Icon(Icons.Outlined.ArrowBack, contentDescription = "返回", tint = Color(0xFF374151))
+                        Icon(Icons.Outlined.ArrowBack, contentDescription = "返回", tint = Color(0xFF667eea))
                     }
-                    Text(text = "历史记录", fontSize = 20.sp, color = Color(0xFF111827))
+                    GradientText(text = "历史记录", fontSize = 24.sp)
                 }
                 TextButton(onClick = { clearAllHistory() }) {
-                    Text("一键清空", color = Color(0xFFDC2626), fontSize = 14.sp)
+                    Text("一键清空", color = Color(0xFFe53e3e), fontSize = 14.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
             if (historyList.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            Icons.Outlined.History,
-                            contentDescription = null,
-                            modifier = Modifier.size(64.dp),
-                            tint = Color(0xFFD1D5DB)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(text = "暂无历史记录", color = Color(0xFF9CA3AF), fontSize = 16.sp)
+                    GlassCard {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(20.dp)) {
+                            Icon(
+                                Icons.Outlined.History,
+                                contentDescription = null,
+                                modifier = Modifier.size(64.dp),
+                                tint = Color(0xFFc7d2fe)
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(text = "暂无历史记录", color = Color(0xFF718096), fontSize = 16.sp)
+                        }
                     }
                 }
             } else {
                 LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(historyList) { record ->
                         HistoryItem(record = record)
@@ -315,8 +405,13 @@ class MainActivity : ComponentActivity() {
         Card(
             modifier = Modifier
                 .fillMaxWidth()
+                .shadow(
+                    elevation = 4.dp,
+                    shape = RoundedCornerShape(20.dp),
+                    ambientColor = Color(0xFF667eea).copy(alpha = 0.1f),
+                    spotColor = Color(0xFF667eea).copy(alpha = 0.1f)
+                )
                 .clickable {
-                    // 点击记录：填充表单并返回主页面
                     labelText = TextFieldValue(record.name)
                     urlText = TextFieldValue(record.url)
                     labelError = false
@@ -324,50 +419,50 @@ class MainActivity : ComponentActivity() {
                     currentPage = Page.MAIN
                     Toast.makeText(this@MainActivity, "已填充，可直接添加到桌面", Toast.LENGTH_SHORT).show()
                 },
-            shape = RoundedCornerShape(12.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = CardBackground)
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
+                    .padding(18.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = record.name,
                         fontSize = 16.sp,
-                        color = Color(0xFF111827),
+                        color = Color(0xFF2d3748),
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
                     Text(
                         text = record.url,
                         fontSize = 13.sp,
-                        color = Color(0xFF6B7280),
+                        color = Color(0xFF718096),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
                     Text(
                         text = formatTime(record.createTime),
                         fontSize = 12.sp,
-                        color = Color(0xFF9CA3AF)
+                        color = Color(0xFFa0aec0)
                     )
                 }
                 IconButton(onClick = { deleteHistory(record) }) {
                     Icon(
                         Icons.Outlined.Delete,
                         contentDescription = "删除",
-                        tint = Color(0xFFDC2626)
+                        tint = Color(0xFFe53e3e)
                     )
                 }
             }
         }
     }
 
-    // ==================== 历史记录存储逻辑 ====================
     private fun loadHistory() {
         try {
             val jsonStr = prefs.getString("history_list", "[]") ?: "[]"
@@ -392,10 +487,8 @@ class MainActivity : ComponentActivity() {
 
     private fun saveHistory(record: ShortcutRecord) {
         try {
-            // 去重：如果同名同网址已存在，先删除旧的
             val newList = historyList.filterNot { it.name == record.name && it.url == record.url }.toMutableList()
-            newList.add(0, record) // 最新的放最前面
-            // 最多保留50条
+            newList.add(0, record)
             val limitedList = newList.take(50)
 
             val jsonArray = JSONArray()
@@ -447,7 +540,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // ==================== 原有功能逻辑 ====================
     private fun checkAndOpenGallery() {
         val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             Manifest.permission.READ_MEDIA_IMAGES
@@ -517,7 +609,6 @@ class MainActivity : ComponentActivity() {
             )
             ShortcutManagerCompat.requestPinShortcut(this, shortcutInfo, pendingIntent.intentSender)
 
-            // 成功发起后，保存到历史记录
             saveHistory(
                 ShortcutRecord(
                     name = shortcutLabel,
