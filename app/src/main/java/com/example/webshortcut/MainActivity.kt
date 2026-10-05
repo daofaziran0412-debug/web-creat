@@ -2,7 +2,9 @@ package com.example.webshortcut
 
 import android.Manifest
 import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -16,10 +18,16 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Clear
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -29,16 +37,30 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
-import java.io.File
-import java.io.FileOutputStream
+import org.json.JSONArray
+import org.json.JSONObject
 import java.net.MalformedURLException
 import java.net.URL
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+// 数据模型：历史记录
+data class ShortcutRecord(
+    val name: String,
+    val url: String,
+    val createTime: Long
+)
+
+// 页面枚举
+enum class Page { MAIN, HISTORY }
 
 class MainActivity : ComponentActivity() {
 
@@ -47,6 +69,10 @@ class MainActivity : ComponentActivity() {
     private var urlText by mutableStateOf(TextFieldValue(""))
     private var labelError by mutableStateOf(false)
     private var urlError by mutableStateOf(false)
+    private var currentPage by mutableStateOf(Page.MAIN)
+    private var historyList by mutableStateOf<List<ShortcutRecord>>(emptyList())
+
+    private lateinit var prefs: SharedPreferences
 
     private val pickImageLauncher = registerForActivityResult(
         ActivityResultContracts.GetContent()
@@ -78,18 +104,24 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        prefs = getSharedPreferences("shortcut_history", Context.MODE_PRIVATE)
+        loadHistory()
         setContent {
             MaterialTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = Color(0xFFF3F4F6)
                 ) {
-                    MainScreen()
+                    when (currentPage) {
+                        Page.MAIN -> MainScreen()
+                        Page.HISTORY -> HistoryScreen()
+                    }
                 }
             }
         }
     }
 
+    // ==================== 主页面 ====================
     @Composable
     fun MainScreen() {
         Column(
@@ -98,28 +130,21 @@ class MainActivity : ComponentActivity() {
                 .padding(horizontal = 20.dp, vertical = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Card(
+            // 顶部标题栏
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Text(
-                        text = "网页快捷方式生成器",
-                        fontSize = 24.sp,
-                        color = Color(0xFF111827)
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "自定义图标和名称，一键创建网页桌面图标",
-                        fontSize = 14.sp,
-                        color = Color(0xFF6B7280)
-                    )
+                Text(text = "网页快捷方式", fontSize = 22.sp, color = Color(0xFF111827))
+                IconButton(onClick = { currentPage = Page.HISTORY }) {
+                    Icon(Icons.Outlined.History, contentDescription = "历史记录", tint = Color(0xFF374151))
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
+            // 图标卡片
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -148,8 +173,9 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
+            // 信息卡片
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -193,7 +219,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(28.dp))
 
             Button(
                 onClick = { createShortcutAction() },
@@ -229,6 +255,199 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // ==================== 历史记录页面 ====================
+    @Composable
+    fun HistoryScreen() {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 20.dp, vertical = 32.dp)
+        ) {
+            // 顶部栏
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { currentPage = Page.MAIN }) {
+                        Icon(Icons.Outlined.ArrowBack, contentDescription = "返回", tint = Color(0xFF374151))
+                    }
+                    Text(text = "历史记录", fontSize = 20.sp, color = Color(0xFF111827))
+                }
+                TextButton(onClick = { clearAllHistory() }) {
+                    Text("一键清空", color = Color(0xFFDC2626), fontSize = 14.sp)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            if (historyList.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            Icons.Outlined.History,
+                            contentDescription = null,
+                            modifier = Modifier.size(64.dp),
+                            tint = Color(0xFFD1D5DB)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(text = "暂无历史记录", color = Color(0xFF9CA3AF), fontSize = 16.sp)
+                    }
+                }
+            } else {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(historyList) { record ->
+                        HistoryItem(record = record)
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun HistoryItem(record: ShortcutRecord) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable {
+                    // 点击记录：填充表单并返回主页面
+                    labelText = TextFieldValue(record.name)
+                    urlText = TextFieldValue(record.url)
+                    labelError = false
+                    urlError = false
+                    currentPage = Page.MAIN
+                    Toast.makeText(this@MainActivity, "已填充，可直接添加到桌面", Toast.LENGTH_SHORT).show()
+                },
+            shape = RoundedCornerShape(12.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = record.name,
+                        fontSize = 16.sp,
+                        color = Color(0xFF111827),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = record.url,
+                        fontSize = 13.sp,
+                        color = Color(0xFF6B7280),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = formatTime(record.createTime),
+                        fontSize = 12.sp,
+                        color = Color(0xFF9CA3AF)
+                    )
+                }
+                IconButton(onClick = { deleteHistory(record) }) {
+                    Icon(
+                        Icons.Outlined.Delete,
+                        contentDescription = "删除",
+                        tint = Color(0xFFDC2626)
+                    )
+                }
+            }
+        }
+    }
+
+    // ==================== 历史记录存储逻辑 ====================
+    private fun loadHistory() {
+        try {
+            val jsonStr = prefs.getString("history_list", "[]") ?: "[]"
+            val jsonArray = JSONArray(jsonStr)
+            val list = mutableListOf<ShortcutRecord>()
+            for (i in 0 until jsonArray.length()) {
+                val obj = jsonArray.getJSONObject(i)
+                list.add(
+                    ShortcutRecord(
+                        name = obj.getString("name"),
+                        url = obj.getString("url"),
+                        createTime = obj.getLong("createTime")
+                    )
+                )
+            }
+            historyList = list
+        } catch (e: Exception) {
+            Log.e("MainActivity", "加载历史记录失败: ${e.message}")
+            historyList = emptyList()
+        }
+    }
+
+    private fun saveHistory(record: ShortcutRecord) {
+        try {
+            // 去重：如果同名同网址已存在，先删除旧的
+            val newList = historyList.filterNot { it.name == record.name && it.url == record.url }.toMutableList()
+            newList.add(0, record) // 最新的放最前面
+            // 最多保留50条
+            val limitedList = newList.take(50)
+
+            val jsonArray = JSONArray()
+            for (item in limitedList) {
+                val obj = JSONObject()
+                obj.put("name", item.name)
+                obj.put("url", item.url)
+                obj.put("createTime", item.createTime)
+                jsonArray.put(obj)
+            }
+            prefs.edit().putString("history_list", jsonArray.toString()).apply()
+            historyList = limitedList
+        } catch (e: Exception) {
+            Log.e("MainActivity", "保存历史记录失败: ${e.message}")
+        }
+    }
+
+    private fun deleteHistory(record: ShortcutRecord) {
+        try {
+            val newList = historyList.filterNot { it.name == record.name && it.url == record.url && it.createTime == record.createTime }
+            val jsonArray = JSONArray()
+            for (item in newList) {
+                val obj = JSONObject()
+                obj.put("name", item.name)
+                obj.put("url", item.url)
+                obj.put("createTime", item.createTime)
+                jsonArray.put(obj)
+            }
+            prefs.edit().putString("history_list", jsonArray.toString()).apply()
+            historyList = newList
+            Toast.makeText(this, "已删除", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Log.e("MainActivity", "删除历史记录失败: ${e.message}")
+        }
+    }
+
+    private fun clearAllHistory() {
+        prefs.edit().remove("history_list").apply()
+        historyList = emptyList()
+        Toast.makeText(this, "已清空全部历史记录", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun formatTime(timeMillis: Long): String {
+        return try {
+            val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
+            sdf.format(Date(timeMillis))
+        } catch (e: Exception) {
+            ""
+        }
+    }
+
+    // ==================== 原有功能逻辑 ====================
     private fun checkAndOpenGallery() {
         val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             Manifest.permission.READ_MEDIA_IMAGES
@@ -297,6 +516,15 @@ class MainActivity : ComponentActivity() {
                 PendingIntent.FLAG_IMMUTABLE
             )
             ShortcutManagerCompat.requestPinShortcut(this, shortcutInfo, pendingIntent.intentSender)
+
+            // 成功发起后，保存到历史记录
+            saveHistory(
+                ShortcutRecord(
+                    name = shortcutLabel,
+                    url = shortcutUrlRaw,
+                    createTime = System.currentTimeMillis()
+                )
+            )
         } else {
             Toast.makeText(this, "当前手机不支持添加桌面快捷方式", Toast.LENGTH_LONG).show()
         }
